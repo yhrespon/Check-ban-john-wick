@@ -737,21 +737,34 @@
                 }
             })();
 
-            // ── simple hash ──
-            function hashString(str) {
-                let h = 0;
-                for (let i = 0; i < str.length; i++) {
-                    h = (h * 31 + str.charCodeAt(i)) >>> 0;
+            // ── vérification réelle via wa.me ──
+            async function checkWhatsApp(phone) {
+                const clean = phone.replace(/\s/g, '').replace(/^\+/, '');
+                // Utilisation d'un proxy CORS gratuit
+                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+                const targetUrl = `https://wa.me/${clean}`;
+
+                try {
+                    const response = await fetch(proxyUrl + targetUrl, {
+                        method: 'HEAD',
+                        redirect: 'manual',
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        }
+                    });
+                    // Si le statut est 302 ou 301, le numéro existe (redirection vers WhatsApp)
+                    return response.status === 302 || response.status === 301;
+                } catch (error) {
+                    console.error('Erreur de vérification :', error);
+                    return null; // erreur réseau / proxy
                 }
-                return h;
             }
 
-            // ── verify ──
-            function runCheck() {
+            // ── exécution ──
+            async function runCheck() {
                 const raw = phoneInput.value.replace(/\s+/g, '').trim();
                 if (!raw) {
                     inputRow.classList.remove('error');
-                    // force reflow
                     void inputRow.offsetWidth;
                     inputRow.classList.add('error');
                     return;
@@ -765,26 +778,43 @@
                 result.classList.add('hidden');
                 result.classList.remove('show');
 
-                setTimeout(function() {
-                    const banned = (hashString(raw) % 2) === 0;
+                // Appel réel
+                const exists = await checkWhatsApp(raw);
 
-                    medallion.classList.remove('spinning');
-                    medallion.classList.add(banned ? 'state-banned' : 'state-active');
+                medallion.classList.remove('spinning');
 
-                    badge.className = 'badge ' + (banned ? 'banned' : 'active');
-                    badgeText.textContent = banned ? 'Compte banni / spam' : 'Compte actif';
+                if (exists === null) {
+                    // Erreur réseau
+                    badge.className = 'badge';
+                    badgeText.textContent = 'Erreur';
                     resultNumber.textContent = '+' + raw;
-                    statusLine.textContent = banned ?
-                        "Ce numéro a été banni ou signalé comme spam sur WhatsApp." :
-                        "Ce numéro est actif sur WhatsApp.";
-                    quoteText.textContent = banned ? BANNED_QUOTE : ACTIVE_QUOTE;
-
+                    statusLine.textContent = "Impossible de contacter le service de vérification. Réessayez plus tard.";
+                    quoteText.textContent = "Même John Wick a besoin d'une connexion stable.";
                     result.classList.remove('hidden');
                     result.classList.add('show');
-
                     verifyBtn.disabled = false;
                     verifyBtn.textContent = 'Vérifier';
-                }, 1300);
+                    return;
+                }
+
+                // exists = true → actif, false → inexistant ou banni
+                const banned = !exists;
+
+                medallion.classList.add(banned ? 'state-banned' : 'state-active');
+
+                badge.className = 'badge ' + (banned ? 'banned' : 'active');
+                badgeText.textContent = banned ? 'Compte inactif ou banni' : 'Compte actif';
+                resultNumber.textContent = '+' + raw;
+                statusLine.textContent = banned ?
+                    "Ce numéro n'est pas enregistré sur WhatsApp ou a été banni." :
+                    "Ce numéro est actif sur WhatsApp.";
+                quoteText.textContent = banned ? BANNED_QUOTE : ACTIVE_QUOTE;
+
+                result.classList.remove('hidden');
+                result.classList.add('show');
+
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = 'Vérifier';
             }
 
             // ── events ──
